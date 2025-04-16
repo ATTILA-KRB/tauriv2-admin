@@ -1,0 +1,89 @@
+name: Publier une nouvelle version
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v3
+        
+      - name: Configuration de Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      
+      - name: Configuration de Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+      
+      - name: Installation des dépendances
+        run: |
+          npm install
+          
+      - name: Build Tauri
+        run: |
+          npm run tauri build
+          
+      - name: Préparer le répertoire de release
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart("v")
+          $releaseDir = "releases/$tag"
+          
+          # Créer le répertoire de release
+          New-Item -Path $releaseDir -ItemType Directory -Force
+          
+          # Copier l'installateur MSI
+          Copy-Item "src-tauri/target/release/bundle/msi/*.msi" "$releaseDir/windows-admin-tool-$version.msi"
+          
+      - name: Mettre à jour version.json
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart("v")
+          
+          # Créer ou mettre à jour le fichier version.json
+          $versionData = @{
+            version = $version
+            url = "https://github.com/${{ github.repository }}/releases/download/$tag/windows-admin-tool-$version.msi"
+            release_date = (Get-Date).ToString("yyyy-MM-dd")
+            description = "Nouvelle version $version de l'outil d'administration Windows"
+            is_critical = $false
+            size_mb = (Get-Item "releases/$tag/windows-admin-tool-$version.msi").Length / 1MB
+            changes = @(
+              "Améliorations et corrections de bugs"
+              "Consultez les notes de version pour plus de détails"
+            )
+          }
+          
+          # Convertir et écrire dans version.json
+          $versionData | ConvertTo-Json -Depth 4 | Set-Content "version.json"
+          
+      - name: Créer la Release GitHub
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            releases/${{ github.ref_name }}/*
+            version.json
+          body: |
+            # Version ${{ github.ref_name }}
+            
+            Date de sortie: ${{ steps.date.outputs.date }}
+            
+            ## Nouveautés
+            - Améliorations et corrections de bugs
+            - Support des mises à jour via GitHub
+            
+            ## Installation
+            Téléchargez le fichier .msi et exécutez-le pour installer ou mettre à jour l'application.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
