@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import PageLayout from '../components/PageLayout';
 import HomeCard from '../components/HomeCard';
+import GridItem from '../components/GridItem';
 
 // Material UI
 import Box from '@mui/material/Box';
@@ -190,7 +191,7 @@ const EventViewerPage: React.FC = () => {
         >
             <Grid container spacing={3}>
                 {/* Section Filtres et Actions */}
-                <Grid item xs={12} md={4}>
+                <GridItem xs={12} md={4}>
                     <HomeCard 
                         title="Filtres et actions" 
                         icon={<FilterListIcon />}
@@ -226,7 +227,7 @@ const EventViewerPage: React.FC = () => {
                     >
                         <Box sx={{ p: 3 }}>
                             <Grid container spacing={2} alignItems="center">
-                                <Grid item xs={12} sm={6} md={3}>
+                                <GridItem xs={12} sm={6} md={3}>
                                     <FormControl fullWidth size="small">
                                         <InputLabel id="log-name-label">Journal</InputLabel>
                                         <Select
@@ -247,9 +248,9 @@ const EventViewerPage: React.FC = () => {
                                             ))}
                                         </Select>
                                     </FormControl>
-                                </Grid>
+                                </GridItem>
 
-                                <Grid item xs={12} sm={6} md={3}>
+                                <GridItem xs={12} sm={6} md={3}>
                                     <FormControl fullWidth size="small">
                                         <InputLabel id="level-label">Niveau</InputLabel>
                                         <Select
@@ -272,9 +273,9 @@ const EventViewerPage: React.FC = () => {
                                             ))}
                                         </Select>
                                     </FormControl>
-                                </Grid>
+                                </GridItem>
 
-                                <Grid item xs={12} sm={6} md={3}>
+                                <GridItem xs={12} sm={6} md={3}>
                                     <TextField
                                         fullWidth
                                         size="small"
@@ -296,9 +297,9 @@ const EventViewerPage: React.FC = () => {
                                             }
                                         }}
                                     />
-                                </Grid>
+                                </GridItem>
 
-                                <Grid item xs={12} sm={6} md={3}>
+                                <GridItem xs={12} sm={6} md={3}>
                                     <TextField
                                         fullWidth
                                         size="small"
@@ -321,9 +322,9 @@ const EventViewerPage: React.FC = () => {
                                             }
                                         }}
                                     />
-                                </Grid>
+                                </GridItem>
 
-                                <Grid item xs={12} sm={6} md={3}>
+                                <GridItem xs={12} sm={6} md={3}>
                                     <FormControl fullWidth size="small">
                                         <InputLabel id="max-events-label">Max événements</InputLabel>
                                         <Select
@@ -339,9 +340,9 @@ const EventViewerPage: React.FC = () => {
                                             ))}
                                         </Select>
                                     </FormControl>
-                                </Grid>
+                                </GridItem>
 
-                                <Grid item xs={12} sm={6} md={9}>
+                                <GridItem xs={12} sm={6} md={9}>
                                     <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                                         <Button
                                             variant="contained"
@@ -374,14 +375,14 @@ const EventViewerPage: React.FC = () => {
                                             </Alert>
                                         )}
                                     </Box>
-                                </Grid>
+                                </GridItem>
                             </Grid>
                         </Box>
                     </HomeCard>
-                </Grid>
+                </GridItem>
 
                 {/* Section Événements */}
-                <Grid item xs={12} md={8}>
+                <GridItem xs={12} md={8}>
                     <HomeCard 
                         title={`Événements du journal ${logName}`} 
                         icon={<EventIcon />}
@@ -494,7 +495,7 @@ const EventViewerPage: React.FC = () => {
                             )}
                         </Box>
                     </HomeCard>
-                </Grid>
+                </GridItem>
             </Grid>
 
             {/* Boîte de dialogue de confirmation pour vider le journal */}
