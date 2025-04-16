@@ -178,13 +178,13 @@ const SecurityPage: React.FC = () => {
     };
     
     // Gérer les changements d'onglet
-    const handleTabChange = (event: React.SyntheticEvent, newValue: string) => {
+    const handleTabChange = (_event: React.SyntheticEvent, newValue: string) => {
         setActiveTab(newValue);
     };
     
     // Gérer les changements de filtre direction
     const handleDirectionFilterChange = (
-        event: React.MouseEvent<HTMLElement>,
+        _event: React.MouseEvent<HTMLElement>,
         newDirection: string | null,
     ) => {
         setDirectionFilter(newDirection);
@@ -192,7 +192,7 @@ const SecurityPage: React.FC = () => {
     
     // Gérer les changements de filtre action
     const handleActionFilterChange = (
-        event: React.MouseEvent<HTMLElement>,
+        _event: React.MouseEvent<HTMLElement>,
         newAction: string | null,
     ) => {
         setActionFilter(newAction);
@@ -375,7 +375,7 @@ const SecurityPage: React.FC = () => {
             description="Gestion des paramètres de sécurité Windows"
         >
             <Grid container spacing={3}>
-                <Grid component="div" item xs={12} md={4}>
+                <Grid item xs={12} md={4}>
                     <HomeCard 
                         title="Microsoft Defender" 
                         icon={<ShieldIcon />}
@@ -494,7 +494,7 @@ const SecurityPage: React.FC = () => {
                     </HomeCard>
                 </Grid>
                 
-                <Grid component="div" item xs={12} md={8}>
+                <Grid item xs={12} md={8}>
                     <HomeCard 
                         title="Règles du Pare-feu Windows" 
                         icon={<FireplaceIcon />}
@@ -525,7 +525,7 @@ const SecurityPage: React.FC = () => {
                             {!rulesLoading && rules.length > 0 && (
                                 <Box sx={{ mb: 3 }}>
                                     <Grid container spacing={2}>
-                                        <Grid component="div" item xs={4}>
+                                        <Grid item xs={4}>
                                             <Card elevation={0} sx={{ 
                                                 p: 1.5, 
                                                 textAlign: 'center',
@@ -540,7 +540,7 @@ const SecurityPage: React.FC = () => {
                                                 </Typography>
                                             </Card>
                                         </Grid>
-                                        <Grid component="div" item xs={4}>
+                                        <Grid item xs={4}>
                                             <Card elevation={0} sx={{ 
                                                 p: 1.5, 
                                                 textAlign: 'center',
@@ -555,7 +555,7 @@ const SecurityPage: React.FC = () => {
                                                 </Typography>
                                             </Card>
                                         </Grid>
-                                        <Grid component="div" item xs={4}>
+                                        <Grid item xs={4}>
                                             <Card elevation={0} sx={{ 
                                                 p: 1.5, 
                                                 textAlign: 'center',
@@ -577,7 +577,7 @@ const SecurityPage: React.FC = () => {
                             {/* Filtres et recherche */}
                             <Box sx={{ mb: 2 }}>
                                 <Grid container spacing={2}>
-                                    <Grid component="div" item xs={12} md={8}>
+                                    <Grid item xs={12} md={8}>
                                         <TextField
                                             fullWidth
                                             variant="outlined"
@@ -622,7 +622,7 @@ const SecurityPage: React.FC = () => {
                                         />
                                     </Grid>
                                     
-                                    <Grid component="div" item xs={12} md={4}>
+                                    <Grid item xs={12} md={4}>
                                         <Box sx={{ display: 'flex', gap: 1, height: '100%', alignItems: 'center', justifyContent: 'flex-end' }}>
                                             <Tooltip title="Vue compacte">
                                                 <FormControlLabel
@@ -643,7 +643,7 @@ const SecurityPage: React.FC = () => {
                                                 <ToggleButtonGroup
                                                     value={viewMode}
                                                     exclusive
-                                                    onChange={(e, newMode) => newMode && setViewMode(newMode)}
+                                                    onChange={(_e, newMode) => newMode && setViewMode(newMode)}
                                                     size="small"
                                                 >
                                                     <ToggleButton value="cards">

@@ -28,6 +28,7 @@ import DevicesPage from './pages/DevicesPage.tsx';
 import AppUpdatePage from './pages/AppUpdatePage.tsx';
 import './index.css'
 import Sidebar from './components/Sidebar';
+import ServerConnectionStatus from './components/ServerConnectionStatus';
 
 const drawerWidth = 240;
 
@@ -53,6 +54,7 @@ function Layout() {
     <ThemeProvider theme={theme}>
       <Box sx={{ display: 'flex' }}>
         <CssBaseline />
+        <ServerConnectionStatus />
         <AppBar 
           position="fixed" 
           sx={{ width: `calc(100% - ${drawerWidth}px)`, ml: `${drawerWidth}px` }}
