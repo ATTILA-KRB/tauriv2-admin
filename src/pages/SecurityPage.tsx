@@ -19,7 +19,7 @@ import InputAdornment from '@mui/material/InputAdornment';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Divider from '@mui/material/Divider';
-import Grid from '@mui/material/Grid';
+import { Grid } from '@mui/material';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import Card from '@mui/material/Card';
@@ -63,6 +63,8 @@ import PublicIcon from '@mui/icons-material/Public';
 import FireplaceIcon from '@mui/icons-material/Fireplace';
 import ImportExportIcon from '@mui/icons-material/ImportExport';
 import TableRowsIcon from '@mui/icons-material/TableRows';
+import ViewListIcon from '@mui/icons-material/ViewList';
+import ViewModuleIcon from '@mui/icons-material/ViewModule';
 
 // Interface pour les règles de pare-feu
 interface FirewallRuleInfo {
@@ -373,8 +375,7 @@ const SecurityPage: React.FC = () => {
             description="Gestion des paramètres de sécurité Windows"
         >
             <Grid container spacing={3}>
-                {/* Section Antivirus */}
-                <Grid item xs={12} md={4}>
+                <Grid component="div" item xs={12} md={4}>
                     <HomeCard 
                         title="Microsoft Defender" 
                         icon={<ShieldIcon />}
@@ -493,8 +494,7 @@ const SecurityPage: React.FC = () => {
                     </HomeCard>
                 </Grid>
                 
-                {/* Section Pare-feu */}
-                <Grid item xs={12} md={8}>
+                <Grid component="div" item xs={12} md={8}>
                     <HomeCard 
                         title="Règles du Pare-feu Windows" 
                         icon={<FireplaceIcon />}
@@ -525,7 +525,7 @@ const SecurityPage: React.FC = () => {
                             {!rulesLoading && rules.length > 0 && (
                                 <Box sx={{ mb: 3 }}>
                                     <Grid container spacing={2}>
-                                        <Grid item xs={4}>
+                                        <Grid component="div" item xs={4}>
                                             <Card elevation={0} sx={{ 
                                                 p: 1.5, 
                                                 textAlign: 'center',
@@ -540,7 +540,7 @@ const SecurityPage: React.FC = () => {
                                                 </Typography>
                                             </Card>
                                         </Grid>
-                                        <Grid item xs={4}>
+                                        <Grid component="div" item xs={4}>
                                             <Card elevation={0} sx={{ 
                                                 p: 1.5, 
                                                 textAlign: 'center',
@@ -555,7 +555,7 @@ const SecurityPage: React.FC = () => {
                                                 </Typography>
                                             </Card>
                                         </Grid>
-                                        <Grid item xs={4}>
+                                        <Grid component="div" item xs={4}>
                                             <Card elevation={0} sx={{ 
                                                 p: 1.5, 
                                                 textAlign: 'center',
@@ -577,7 +577,7 @@ const SecurityPage: React.FC = () => {
                             {/* Filtres et recherche */}
                             <Box sx={{ mb: 2 }}>
                                 <Grid container spacing={2}>
-                                    <Grid item xs={12} md={8}>
+                                    <Grid component="div" item xs={12} md={8}>
                                         <TextField
                                             fullWidth
                                             variant="outlined"
@@ -622,7 +622,7 @@ const SecurityPage: React.FC = () => {
                                         />
                                     </Grid>
                                     
-                                    <Grid item xs={12} md={4}>
+                                    <Grid component="div" item xs={12} md={4}>
                                         <Box sx={{ display: 'flex', gap: 1, height: '100%', alignItems: 'center', justifyContent: 'flex-end' }}>
                                             <Tooltip title="Vue compacte">
                                                 <FormControlLabel

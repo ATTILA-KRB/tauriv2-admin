@@ -1,3 +1,38 @@
+# TAURIV2-ADMIN
+
+Interface d'administration pour TAURIV2, développée avec React et TypeScript.
+
+## 🚀 Installation
+
+```bash
+# Cloner le repository
+git clone [URL_DU_REPO]
+
+# Installer les dépendances
+npm install
+
+# Lancer en mode développement
+npm run dev
+
+# Construire pour la production
+npm run build
+```
+
+## 🛠️ Technologies
+
+- React
+- TypeScript
+- Vite
+- Material-UI
+
+## 📝 Version
+
+Version actuelle : 0.1.0
+
+## 📄 Licence
+
+MIT License
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

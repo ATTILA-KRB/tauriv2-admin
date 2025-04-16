@@ -190,7 +190,7 @@ const EventViewerPage: React.FC = () => {
         >
             <Grid container spacing={3}>
                 {/* Section Filtres et Actions */}
-                <Grid item xs={12}>
+                <Grid item xs={12} md={4}>
                     <HomeCard 
                         title="Filtres et actions" 
                         icon={<FilterListIcon />}
@@ -381,7 +381,7 @@ const EventViewerPage: React.FC = () => {
                 </Grid>
 
                 {/* Section Événements */}
-                <Grid item xs={12}>
+                <Grid item xs={12} md={8}>
                     <HomeCard 
                         title={`Événements du journal ${logName}`} 
                         icon={<EventIcon />}
