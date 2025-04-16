@@ -1,4 +1,4 @@
-# TAURIV2-ADMIN 🛠️
+# ADMIN-TOOL 🛠️
 
 Interface d'administration Windows complète développée avec React, TypeScript et Tauri, offrant une solution moderne et sécurisée pour la gestion système Windows.
 
