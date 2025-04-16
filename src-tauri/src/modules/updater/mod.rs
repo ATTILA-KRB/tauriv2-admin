@@ -58,7 +58,7 @@ pub async fn check_for_updates(app: AppHandle) -> Result<UpdateCheckResult, Stri
     println!("Version actuelle: {}", current_version);
     
     // URL du fichier de métadonnées sur GitHub
-    let update_url = "https://raw.githubusercontent.com/utilisateur/tauriv2-admin-updates/main/version.json";
+    let update_url = "https://raw.githubusercontent.com/ATTILA-KRB/tauriv2-admin/main/version.json";
     
     // Commande Bash pour récupérer les données JSON avec curl
     let check_command = format!(
