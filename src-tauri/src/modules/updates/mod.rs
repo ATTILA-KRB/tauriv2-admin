@@ -64,7 +64,7 @@ pub async fn list_installed_updates(app: AppHandle) -> Result<Vec<InstalledUpdat
 
     let output = app.shell()
         .command("powershell")
-        .args(&["-Command", command])
+        .args(&["-ExecutionPolicy", "Bypass", "-Command", command])
         .output()
         .await
         .map_err(|e| format!("Erreur lors de l'exécution de Get-WmiObject: {}", e))?;
@@ -112,16 +112,20 @@ pub async fn list_installed_updates(app: AppHandle) -> Result<Vec<InstalledUpdat
 pub async fn search_available_updates(app: AppHandle) -> Result<Vec<AvailableUpdateInfo>, String> {
     println!("Real: search_available_updates() called");
 
-    // 1. Tenter d'importer explicitement le module D'ABORD
+    // 1. Tenter d'importer explicitement le module D'ABORD avec ExecutionPolicy Bypass
     let import_cmd = "Import-Module PSWindowsUpdate -Force -ErrorAction Stop";
     println!("Tentative d'import du module PSWindowsUpdate...");
-    let import_output = app.shell().command("powershell").args(&["-Command", import_cmd]).output().await
+    let import_output = app.shell().command("powershell")
+        .args(&["-ExecutionPolicy", "Bypass", "-Command", import_cmd])
+        .output().await
         .map_err(|e| format!("Erreur lors de la tentative d'import de PSWindowsUpdate: {}", e))?;
     
     if !import_output.status.success() {
         // Si l'import échoue, vérifier si c'est parce que le module est manquant
         let module_check_cmd = "if (Get-Module -ListAvailable -Name PSWindowsUpdate) { $true } else { $false }";
-        let module_check_output = app.shell().command("powershell").args(&["-Command", module_check_cmd]).output().await
+        let module_check_output = app.shell().command("powershell")
+            .args(&["-ExecutionPolicy", "Bypass", "-Command", module_check_cmd])
+            .output().await
             .map_err(|e| format!("Erreur vérification module AD: {}", e))?;
         
         let module_exists_str = String::from_utf8_lossy(&module_check_output.stdout).trim().to_lowercase();
@@ -130,7 +134,7 @@ pub async fn search_available_updates(app: AppHandle) -> Result<Vec<AvailableUpd
         } else {
             // Le module existe mais n'a pas pu être importé -> Problème de politique/sécurité
              return Err(format!(
-                "Impossible de charger le module PSWindowsUpdate (même s'il est installé). Raison fréquente : Politique d'exécution PowerShell trop restrictive (Vérifiez avec Get-ExecutionPolicy -List). Détails: {:?} \nErreur PS: {}", 
+                "Impossible de charger le module PSWindowsUpdate (même avec ExecutionPolicy Bypass). Vérifiez les autorisations du module. Détails: {:?} \nErreur PS: {}", 
                 import_output.status, 
                 String::from_utf8_lossy(&import_output.stderr)
             ));
@@ -146,7 +150,7 @@ pub async fn search_available_updates(app: AppHandle) -> Result<Vec<AvailableUpd
     
     let output = app.shell()
         .command("powershell")
-        .args(&["-Command", command])
+        .args(&["-ExecutionPolicy", "Bypass", "-Command", command])
         .output()
         .await
         .map_err(|e| format!("Erreur lors de l'exécution de Get-WindowsUpdate: {}", e))?;
@@ -229,7 +233,7 @@ pub async fn search_available_updates(app: AppHandle) -> Result<Vec<AvailableUpd
     
     let defender_output = app.shell()
         .command("powershell")
-        .args(&["-Command", defender_cmd])
+        .args(&["-ExecutionPolicy", "Bypass", "-Command", defender_cmd])
         .output()
         .await;
         
@@ -263,7 +267,7 @@ pub async fn search_available_updates(app: AppHandle) -> Result<Vec<AvailableUpd
 async fn get_execution_policy_string(app: &AppHandle) -> Result<String, String> {
     let output = app.shell()
         .command("powershell")
-        .args(&["-Command", "(Get-ExecutionPolicy).ToString()"]) 
+        .args(&["-ExecutionPolicy", "Bypass", "-Command", "(Get-ExecutionPolicy).ToString()"]) 
         .output()
         .await
         .map_err(|e| e.to_string())?;
@@ -281,4 +285,23 @@ pub async fn updates_placeholder() -> Result<(), String> {
     println!("Placeholder: updates command called");
     Err("Placeholder non utilisé".to_string())
 }
-*/ 
+*/
+
+#[command]
+pub async fn install_defender_updates(app: AppHandle) -> Result<String, String> {
+    println!("Real: install_defender_updates() called");
+    
+    // Exécuter la commande pour installer les mises à jour de définition
+    let output = app.shell()
+        .command("powershell")
+        .args(&["-ExecutionPolicy", "Bypass", "-Command", "Update-MpSignature -Verbose | Out-String"])
+        .output()
+        .await
+        .map_err(|e| format!("Erreur lors de l'exécution de Update-MpSignature: {}", e))?;
+    
+    if output.status.success() {
+        Ok(format!("Mise à jour des définitions de Microsoft Defender réussie:\n{}", String::from_utf8_lossy(&output.stdout)))
+    } else {
+        Err(format!("Échec de la mise à jour des définitions de Microsoft Defender:\n{}", String::from_utf8_lossy(&output.stderr)))
+    }
+} 
