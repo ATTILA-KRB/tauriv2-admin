@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import PageLayout from '../components/PageLayout';
-import InfoCard from '../components/InfoCard';
 import HomeCard from '../components/HomeCard';
 
 // Material UI
@@ -35,7 +34,6 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import SpeedIcon from '@mui/icons-material/Speed';
 import FormatColorResetIcon from '@mui/icons-material/FormatColorReset';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import MemoryIcon from '@mui/icons-material/Memory';
 import DoneIcon from '@mui/icons-material/Done';
 import WarningIcon from '@mui/icons-material/Warning';
 import SdCardIcon from '@mui/icons-material/SdCard';
@@ -134,19 +132,24 @@ const DisksPage: React.FC = () => {
 
     // Fonction pour charger les partitions d'un disque
     const fetchPartitions = (diskNumber: number) => {
+        console.log(`Chargement des partitions pour le disque ${diskNumber}`);
         setSelectedDiskNumber(diskNumber);
         setIsLoadingPartitions(true);
         setPartitionsError(null);
         setPartitions([]); // Vider les anciennes partitions
         invoke<PartitionInfo[]>('get_disk_partitions', { diskNumber }) 
             .then(data => {
+                console.log(`Partitions reçues pour disque ${diskNumber}:`, data);
                 setPartitions(data);
             })
             .catch(err => {
                 console.error(`Erreur partitions disque ${diskNumber}:`, err);
                 setPartitionsError(typeof err === 'string' ? err : `Erreur inconnue (partitions disque ${diskNumber}).`);
             })
-            .finally(() => setIsLoadingPartitions(false));
+            .finally(() => {
+                console.log(`Fin du chargement des partitions pour disque ${diskNumber}`);
+                setIsLoadingPartitions(false);
+            });
     };
 
     // Fonction pour analyser la corbeille
@@ -233,8 +236,21 @@ const DisksPage: React.FC = () => {
 
     // Rendu de la barre de progression d'utilisation du disque
     const renderDiskUsageBar = (disk: DiskInfo) => {
+        // Vérifier si nous avons des données valides
+        if (disk.total_space === 0 || disk.available_space === 0) {
+            return (
+                <Box sx={{ width: '100%', mt: 1 }}>
+                    <Alert severity="info" sx={{ borderRadius: 2 }}>
+                        <Typography variant="caption">
+                            {!disk.mount_point ? "Disque sans lettre de lecteur" : "Informations d'espace non disponibles"}
+                        </Typography>
+                    </Alert>
+                </Box>
+            );
+        }
+
         const usedSpace = disk.total_space - disk.available_space;
-        const usedPercentage = (usedSpace / disk.total_space) * 100;
+        const usedPercentage = Math.min(100, Math.max(0, (usedSpace / disk.total_space) * 100));
         
         let color = 'success';
         if (usedPercentage > 90) color = 'error';
@@ -262,9 +278,12 @@ const DisksPage: React.FC = () => {
                         }
                     }}
                 />
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
                     <Typography variant="caption" color="text.secondary">
                         {formatBytes(disk.available_space)} libres
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                        Total: {formatBytes(disk.total_space)}
                     </Typography>
                 </Box>
             </Box>

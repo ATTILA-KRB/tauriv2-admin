@@ -2,6 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import PageLayout from '../components/PageLayout';
 import HomeCard from '../components/HomeCard';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import ErrorIcon from '@mui/icons-material/Error';
 
 // Material UI
 import Box from '@mui/material/Box';
@@ -23,6 +28,8 @@ import InputAdornment from '@mui/material/InputAdornment';
 import Card from '@mui/material/Card';
 import Alert from '@mui/material/Alert';
 import Divider from '@mui/material/Divider';
+import Grid from '@mui/material/Grid';
+import { useTheme } from '@mui/material/styles';
 
 // Icons
 import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt';
@@ -86,6 +93,14 @@ const UpdatesPage: React.FC = () => {
     const [searchError, setSearchError] = useState<string | null>(null);
     const [availableFilter, setAvailableFilter] = useState<string>("");
     const [isSearchComplete, setIsSearchComplete] = useState<boolean>(false);
+
+    // Ajouter de nouveaux états pour le tracking des installations
+    const [installingUpdates, setInstallingUpdates] = useState<Set<string>>(new Set());
+    const [installationResults, setInstallationResults] = useState<Map<string, {success: boolean, message: string}>>(new Map());
+    const [showResultDialog, setShowResultDialog] = useState(false);
+    const [currentResult, setCurrentResult] = useState<{success: boolean, message: string} | null>(null);
+
+    const theme   = useTheme();
 
     // Charger l'historique
     const fetchHistory = useCallback(() => {
@@ -165,197 +180,303 @@ const UpdatesPage: React.FC = () => {
         }
     };
 
+    // Remplacer les fonctions d'installation existantes
+    const installPSWindowsUpdateModule = async () => {
+        try {
+            setIsSearching(true); // Réutiliser l'état de chargement existant
+            const result = await invoke('install_pswindowsupdate_module');
+            
+            // Afficher le résultat dans l'interface au lieu d'alert
+            setCurrentResult({ success: true, message: result as string });
+            setShowResultDialog(true);
+            
+            // Rafraîchir après succès
+            setTimeout(() => {
+                handleSearchUpdates();
+            }, 1000);
+        } catch (error) {
+            console.error("Erreur installation module:", error);
+            setCurrentResult({ 
+                success: false, 
+                message: `Erreur lors de l'installation du module PSWindowsUpdate: ${error}` 
+            });
+            setShowResultDialog(true);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    const installSpecificUpdate = async (update: AvailableUpdateInfo) => {
+        const updateId = update.kb_id || update.title;
+        
+        // Marquer cette mise à jour comme en cours d'installation
+        setInstallingUpdates(prev => new Set([...prev, updateId]));
+        
+        try {
+            let result: string;
+            
+            if (update.kb_id === "KB2267602") {
+                result = await invoke('install_defender_updates');
+            } else {
+                result = await invoke('install_windows_updates');
+            }
+            
+            // Stocker le résultat
+            setInstallationResults(prev => new Map([
+                ...prev, 
+                [updateId, { success: true, message: result }]
+            ]));
+            
+            setCurrentResult({ success: true, message: result });
+            setShowResultDialog(true);
+            
+            // Rafraîchir la liste après un délai
+            setTimeout(() => {
+                handleSearchUpdates();
+            }, 1000);
+            
+        } catch (error) {
+            console.error("Erreur installation:", error);
+            const errorMessage = `Erreur lors de l'installation de ${update.title}: ${error}`;
+            
+            setInstallationResults(prev => new Map([
+                ...prev, 
+                [updateId, { success: false, message: errorMessage }]
+            ]));
+            
+            setCurrentResult({ success: false, message: errorMessage });
+            setShowResultDialog(true);
+        } finally {
+            // Retirer de la liste des installations en cours
+            setInstallingUpdates(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(updateId);
+                return newSet;
+            });
+        }
+    };
+
+    // Ajouter ce composant de dialogue pour les résultats
+    const ResultDialog = () => (
+        <Dialog open={showResultDialog} onClose={() => setShowResultDialog(false)} maxWidth="md">
+            <DialogTitle>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    {currentResult?.success ? (
+                        <CheckCircleIcon color="success" />
+                    ) : (
+                        <ErrorIcon color="error" />
+                    )}
+                    {currentResult?.success ? 'Installation réussie' : 'Erreur d\'installation'}
+                </Box>
+            </DialogTitle>
+            <DialogContent>
+                <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                    {currentResult?.message}
+                </Typography>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={() => setShowResultDialog(false)} variant="contained">
+                    OK
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+
     return (
         <PageLayout 
             title="Mises à jour Windows" 
             icon={<SystemUpdateAltIcon />}
             description="Recherche et gestion des mises à jour système"
         >
-            {/* Cartes de statistiques */}
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
-                {/* Carte Tableau de bord */}
-                <Box sx={{ width: { xs: '100%', md: 'calc(50% - 8px)' } }}>
-                    <HomeCard
-                        title="Tableau de bord"
-                        icon={<DashboardIcon />}
-                        avatarColor="info.main"
-                        accentColor="#0288d1"
-                        variant="gradient"
-                    >
-                        <Box sx={{ p: 2 }}>
-                            <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                                <Box sx={{ flex: 1 }}>
-                                    <Card elevation={0} sx={{ 
-                                        p: 1.5, 
-                                        textAlign: 'center',
-                                        borderRadius: 2,
-                                        bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(121, 134, 203, 0.1)' : 'rgba(121, 134, 203, 0.05)',
-                                        width: '100%'
-                                    }}>
-                                        <Typography variant="h4" sx={{ color: "#7986cb", fontWeight: "bold" }}>
-                                            {stats.installed}
-                                        </Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            Mises à jour installées
-                                        </Typography>
-                                    </Card>
+            {/* Section Tableau de bord et Défense */}
+            <Box sx={{ mb: 3 }}>
+                <Grid container spacing={3} sx={{ height: 'auto' }}>
+                    <Grid item xs={12} md={6}>
+                        <HomeCard
+                            title="Tableau de bord"
+                            icon={<DashboardIcon />}
+                            avatarColor="#1976d2"
+                            accentColor="#1976d2"
+                            variant="gradient"
+                        >
+                            <Box sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                                    <Box sx={{ flex: 1 }}>
+                                        <Card elevation={0} sx={{ 
+                                            p: 2, 
+                                            textAlign: 'center',
+                                            borderRadius: '12px',
+                                            bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(121, 134, 203, 0.1)' : 'rgba(121, 134, 203, 0.05)',
+                                            width: '100%',
+                                            border: theme => `1px solid ${theme.palette.mode === 'dark' ? 'rgba(121, 134, 203, 0.2)' : 'rgba(121, 134, 203, 0.1)'}`
+                                        }}>
+                                            <Typography variant="h4" sx={{ color: "#7986cb", fontWeight: "bold" }}>
+                                                {stats.installed}
+                                            </Typography>
+                                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                Mises à jour installées
+                                            </Typography>
+                                        </Card>
+                                    </Box>
+                                    
+                                    <Box sx={{ flex: 1 }}>
+                                        <Card elevation={0} sx={{ 
+                                            p: 2, 
+                                            textAlign: 'center',
+                                            borderRadius: '12px',
+                                            bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 137, 123, 0.1)' : 'rgba(0, 137, 123, 0.05)',
+                                            width: '100%',
+                                            border: theme => `1px solid ${theme.palette.mode === 'dark' ? 'rgba(0, 137, 123, 0.2)' : 'rgba(0, 137, 123, 0.1)'}`
+                                        }}>
+                                            <Typography variant="h4" sx={{ color: "#00897b", fontWeight: "bold" }}>
+                                                {stats.available}
+                                            </Typography>
+                                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                Mises à jour disponibles
+                                            </Typography>
+                                        </Card>
+                                    </Box>
                                 </Box>
                                 
-                                <Box sx={{ flex: 1 }}>
-                                    <Card elevation={0} sx={{ 
-                                        p: 1.5, 
-                                        textAlign: 'center',
-                                        borderRadius: 2,
-                                        bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 137, 123, 0.1)' : 'rgba(0, 137, 123, 0.05)',
-                                        width: '100%'
-                                    }}>
-                                        <Typography variant="h4" sx={{ color: "#00897b", fontWeight: "bold" }}>
-                                            {stats.available}
-                                        </Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            Mises à jour disponibles
-                                        </Typography>
-                                    </Card>
-                                </Box>
-                            </Box>
-                            
-                            <Box sx={{ mb: 2 }}>
-                                <Alert
-                                    severity={availableUpdates.length > 0 ? "info" : "success"}
-                                    icon={availableUpdates.length > 0 ? <InfoIcon /> : <CheckCircleIcon />}
-                                    sx={{ borderRadius: 2, width: '100%' }}
-                                >
-                                    {availableUpdates.length > 0 
-                                        ? `${availableUpdates.length} mise(s) à jour disponible(s) pour votre système.` 
-                                        : isSearchComplete 
-                                            ? "Votre système est à jour." 
-                                            : "Recherchez les mises à jour disponibles."
-                                    }
-                                </Alert>
-                            </Box>
-                            
-                            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    startIcon={isSearching ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
-                                    onClick={handleSearchUpdates}
-                                    disabled={isSearching}
-                                    sx={{ 
-                                        borderRadius: 2,
-                                        boxShadow: 2,
-                                        transition: 'all 0.2s',
-                                        '&:hover': { transform: 'translateY(-2px)' }
-                                    }}
-                                >
-                                    {isSearching ? "Recherche..." : "Rechercher les mises à jour"}
-                                </Button>
-                            </Box>
-                        </Box>
-                    </HomeCard>
-                </Box>
-                
-                {/* Carte Défense & Sécurité */}
-                <Box sx={{ width: { xs: '100%', md: 'calc(50% - 8px)' } }}>
-                    <HomeCard
-                        title="Défense & Sécurité"
-                        icon={<SecurityIcon />}
-                        avatarColor="error.main"
-                        accentColor="#f44336"
-                        variant="gradient"
-                    >
-                        <Box sx={{ p: 2 }}>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                <Box>
-                                    <Card elevation={0} sx={{ 
-                                        p: 1.5, 
-                                        borderRadius: 2,
-                                        bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(244, 67, 54, 0.1)' : 'rgba(244, 67, 54, 0.05)',
-                                        width: '100%'
-                                    }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                            <Box>
-                                                <Typography variant="h6" sx={{ color: "error.main", fontWeight: "bold" }}>
-                                                    Microsoft Defender
-                                                </Typography>
-                                                <Typography variant="body2" color="text.secondary">
-                                                    {availableUpdates.some(update => update.kb_id === "KB2267602")
-                                                        ? "Mise à jour de sécurité disponible"
-                                                        : "Définitions de sécurité à jour"
-                                                    }
-                                                </Typography>
-                                            </Box>
-                                            <Box sx={{ ml: 'auto' }}>
-                                                {availableUpdates.some(update => update.kb_id === "KB2267602") ? (
-                                                    <Button 
-                                                        variant="contained" 
-                                                        color="error"
-                                                        size="small"
-                                                        startIcon={<UpdateIcon />}
-                                                        sx={{ borderRadius: 2 }}
-                                                    >
-                                                        Mettre à jour
-                                                    </Button>
-                                                ) : (
-                                                    <Chip 
-                                                        label="Protégé" 
-                                                        color="success" 
-                                                        size="small"
-                                                        icon={<CheckCircleIcon />}
-                                                        sx={{ borderRadius: 6 }}
-                                                    />
-                                                )}
-                                            </Box>
-                                        </Box>
-                                    </Card>
+                                <Box sx={{ mb: 2, flex: 1 }}>
+                                    <Alert
+                                        severity={availableUpdates.length > 0 ? "info" : "success"}
+                                        icon={availableUpdates.length > 0 ? <InfoIcon /> : <CheckCircleIcon />}
+                                        sx={{ borderRadius: '12px', width: '100%' }}
+                                    >
+                                        {availableUpdates.length > 0 
+                                            ? `${availableUpdates.length} mise(s) à jour disponible(s) pour votre système.` 
+                                            : isSearchComplete 
+                                                ? "Votre système est à jour." 
+                                                : "Recherchez les mises à jour disponibles."
+                                        }
+                                    </Alert>
                                 </Box>
                                 
-                                <Box>
-                                    <Card elevation={0} sx={{ 
-                                        p: 1.5, 
-                                        borderRadius: 2,
-                                        bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(121, 85, 72, 0.1)' : 'rgba(121, 85, 72, 0.05)',
-                                        width: '100%'
-                                    }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                            <Box>
-                                                <Typography variant="h6" sx={{ color: "#795548", fontWeight: "bold" }}>
-                                                    Mises à jour de sécurité
-                                                </Typography>
-                                                <Typography variant="body2" color="text.secondary">
-                                                    {availableUpdates.filter(update => update.kb_id !== "KB2267602").length > 0
-                                                        ? `${availableUpdates.filter(update => update.kb_id !== "KB2267602").length} mise(s) à jour de sécurité en attente`
-                                                        : "Toutes les mises à jour de sécurité sont installées"
-                                                    }
-                                                </Typography>
-                                            </Box>
-                                            <Box sx={{ ml: 'auto' }}>
-                                                {availableUpdates.filter(update => update.kb_id !== "KB2267602").length > 0 ? (
-                                                    <Button 
-                                                        variant="outlined" 
-                                                        size="small"
-                                                        startIcon={<SettingsIcon />}
-                                                        sx={{ borderRadius: 2 }}
-                                                    >
-                                                        Détails
-                                                    </Button>
-                                                ) : (
-                                                    <Chip 
-                                                        label="À jour" 
-                                                        color="success" 
-                                                        variant="outlined"
-                                                        size="small"
-                                                        sx={{ borderRadius: 6 }}
-                                                    />
-                                                )}
-                                            </Box>
-                                        </Box>
-                                    </Card>
+                                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 'auto' }}>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        startIcon={isSearching ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
+                                        onClick={handleSearchUpdates}
+                                        disabled={isSearching}
+                                        fullWidth
+                                        sx={{ 
+                                            borderRadius: '12px',
+                                            boxShadow: 2,
+                                            transition: 'all 0.2s',
+                                            '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 }
+                                        }}
+                                    >
+                                        {isSearching ? "Recherche..." : "Rechercher les mises à jour"}
+                                    </Button>
                                 </Box>
                             </Box>
-                        </Box>
-                    </HomeCard>
-                </Box>
+                        </HomeCard>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                        <HomeCard
+                            title="Défense & Sécurité"
+                            icon={<SecurityIcon />}
+                            avatarColor="error.main"
+                            accentColor="#f44336"
+                            variant="gradient"
+                        >
+                            <Box sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+                                    <Box>
+                                        <Card elevation={0} sx={{ 
+                                            p: 2, 
+                                            borderRadius: '12px',
+                                            bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(244, 67, 54, 0.1)' : 'rgba(244, 67, 54, 0.05)',
+                                            width: '100%',
+                                            border: theme => `1px solid ${theme.palette.mode === 'dark' ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'}`
+                                        }}>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                                <Box>
+                                                    <Typography variant="h6" sx={{ color: "error.main", fontWeight: "bold" }}>
+                                                        Microsoft Defender
+                                                    </Typography>
+                                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                        {availableUpdates.some(update => update.kb_id === "KB2267602")
+                                                            ? "Mise à jour de sécurité disponible"
+                                                            : "Définitions de sécurité à jour"
+                                                        }
+                                                    </Typography>
+                                                </Box>
+                                                <Box sx={{ ml: 'auto' }}>
+                                                    {availableUpdates.some(update => update.kb_id === "KB2267602") ? (
+                                                        <Button 
+                                                            variant="contained" 
+                                                            color="error"
+                                                            size="small"
+                                                            startIcon={<UpdateIcon />}
+                                                            sx={{ borderRadius: '8px' }}
+                                                        >
+                                                            Mettre à jour
+                                                        </Button>
+                                                    ) : (
+                                                        <Chip 
+                                                            label="Protégé" 
+                                                            color="success" 
+                                                            size="small"
+                                                            icon={<CheckCircleIcon />}
+                                                            sx={{ borderRadius: '8px' }}
+                                                        />
+                                                    )}
+                                                </Box>
+                                            </Box>
+                                        </Card>
+                                    </Box>
+                                    
+                                    <Box>
+                                        <Card elevation={0} sx={{ 
+                                            p: 2, 
+                                            borderRadius: '12px',
+                                            bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(121, 85, 72, 0.1)' : 'rgba(121, 85, 72, 0.05)',
+                                            width: '100%',
+                                            border: theme => `1px solid ${theme.palette.mode === 'dark' ? 'rgba(121, 85, 72, 0.2)' : 'rgba(121, 85, 72, 0.1)'}`
+                                        }}>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                                <Box>
+                                                    <Typography variant="h6" sx={{ color: "#795548", fontWeight: "bold" }}>
+                                                        Mises à jour de sécurité
+                                                    </Typography>
+                                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                        {availableUpdates.filter(update => update.kb_id !== "KB2267602").length > 0
+                                                            ? `${availableUpdates.filter(update => update.kb_id !== "KB2267602").length} mise(s) à jour de sécurité en attente`
+                                                            : "Toutes les mises à jour de sécurité sont installées"
+                                                        }
+                                                    </Typography>
+                                                </Box>
+                                                <Box sx={{ ml: 'auto' }}>
+                                                    {availableUpdates.filter(update => update.kb_id !== "KB2267602").length > 0 ? (
+                                                        <Button 
+                                                            variant="outlined" 
+                                                            size="small"
+                                                            startIcon={<SettingsIcon />}
+                                                            sx={{ borderRadius: '8px' }}
+                                                        >
+                                                            Détails
+                                                        </Button>
+                                                    ) : (
+                                                        <Chip 
+                                                            label="À jour" 
+                                                            color="success" 
+                                                            variant="outlined"
+                                                            size="small"
+                                                            sx={{ borderRadius: '8px' }}
+                                                        />
+                                                    )}
+                                                </Box>
+                                            </Box>
+                                        </Card>
+                                    </Box>
+                                </Box>
+                            </Box>
+                        </HomeCard>
+                    </Grid>
+                </Grid>
             </Box>
 
             {/* Section Recherche de Mises à jour */}
@@ -390,8 +511,8 @@ const UpdatesPage: React.FC = () => {
                     <Box sx={{ p: 2 }}>
                         {/* Statistiques en haut */}
                         <Box sx={{ mb: 3 }}>
-                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                                <Box sx={{ flex: 1, minWidth: { xs: '100%', sm: 'calc(33.33% - 8px)' } }}>
+                            <Grid container spacing={2}>
+                                <Grid item xs={12} sm={4}>
                                     <Card elevation={0} sx={{ 
                                         p: 1.5, 
                                         textAlign: 'center',
@@ -406,8 +527,8 @@ const UpdatesPage: React.FC = () => {
                                             Mises à jour disponibles
                                         </Typography>
                                     </Card>
-                                </Box>
-                                <Box sx={{ flex: 1, minWidth: { xs: '100%', sm: 'calc(33.33% - 8px)' } }}>
+                                </Grid>
+                                <Grid item xs={12} sm={4}>
                                     <Card elevation={0} sx={{ 
                                         p: 1.5, 
                                         textAlign: 'center',
@@ -422,8 +543,8 @@ const UpdatesPage: React.FC = () => {
                                             Déjà téléchargées
                                         </Typography>
                                     </Card>
-                                </Box>
-                                <Box sx={{ flex: 1, minWidth: { xs: '100%', sm: 'calc(33.33% - 8px)' } }}>
+                                </Grid>
+                                <Grid item xs={12} sm={4}>
                                     <Card elevation={0} sx={{ 
                                         p: 1.5, 
                                         textAlign: 'center',
@@ -438,8 +559,8 @@ const UpdatesPage: React.FC = () => {
                                             Taille totale
                                         </Typography>
                                     </Card>
-                                </Box>
-                            </Box>
+                                </Grid>
+                            </Grid>
                         </Box>
 
                         {/* Filtres */}
@@ -505,15 +626,15 @@ const UpdatesPage: React.FC = () => {
                                 </Typography>
                             </Box>
                         ) : (
-                            <TableContainer 
-                                component={Paper} 
-                                elevation={0} 
-                                sx={{ 
-                                    borderRadius: '12px',
-                                    overflow: 'hidden',
-                                    border: theme => `1px solid ${
-                                        theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'
-                                    }`
+                            <TableContainer
+                                component={Paper}
+                                elevation={0}
+                                sx={{
+                                    borderRadius:'12px',
+                                    overflowX:'auto',
+                                    maxWidth:'100%',
+                                    border: theme => `1px solid ${theme.palette.mode==='dark'
+                                          ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}`
                                 }}
                             >
                                 <Table size="small">
@@ -528,7 +649,9 @@ const UpdatesPage: React.FC = () => {
                                         }}>
                                             <TableCell><Typography variant="subtitle2">Mise à jour</Typography></TableCell>
                                             <TableCell><Typography variant="subtitle2">KB ID</Typography></TableCell>
-                                            <TableCell><Typography variant="subtitle2">Taille</Typography></TableCell>
+                                            <TableCell sx={{ display:{ xs:'none', sm:'table-cell' }}}>
+                                              <Typography variant="subtitle2">Taille</Typography>
+                                            </TableCell>
                                             <TableCell><Typography variant="subtitle2">Statut</Typography></TableCell>
                                             <TableCell><Typography variant="subtitle2">Actions</Typography></TableCell>
                                         </TableRow>
@@ -572,7 +695,7 @@ const UpdatesPage: React.FC = () => {
                                                         sx={{ borderRadius: '6px' }}
                                                     />
                                                 </TableCell>
-                                                <TableCell>
+                                                <TableCell sx={{ display:{ xs:'none', sm:'table-cell' }}}>
                                                     <Chip 
                                                         icon={<StorageIcon fontSize="small" />}
                                                         label={formatBytes(update.size)} 
@@ -606,16 +729,47 @@ const UpdatesPage: React.FC = () => {
                                                     <Button
                                                         variant="contained"
                                                         size="small"
-                                                        startIcon={<CloudDownloadIcon />}
-                                                        disabled={update.is_downloaded}
+                                                        startIcon={
+                                                            installingUpdates.has(update.kb_id || update.title) ? (
+                                                                <CircularProgress size={16} color="inherit" />
+                                                            ) : (
+                                                                <CloudDownloadIcon />
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            update.is_downloaded || 
+                                                            installingUpdates.has(update.kb_id || update.title) ||
+                                                            isSearching
+                                                        }
+                                                        onClick={() => installSpecificUpdate(update)}
                                                         sx={{ 
                                                             borderRadius: '8px',
                                                             fontSize: '0.75rem',
-                                                            py: 0.5
+                                                            py: 0.5,
+                                                            minWidth: '100px'
                                                         }}
                                                     >
-                                                        Installer
+                                                        {installingUpdates.has(update.kb_id || update.title) 
+                                                            ? "Installation..." 
+                                                            : "Installer"
+                                                        }
                                                     </Button>
+                                                    
+                                                    {/* Afficher le résultat si disponible */}
+                                                    {installationResults.has(update.kb_id || update.title) && (
+                                                        <Box sx={{ mt: 1 }}>
+                                                            <Chip
+                                                                icon={installationResults.get(update.kb_id || update.title)?.success ? 
+                                                                    <CheckCircleIcon /> : <ErrorIcon />}
+                                                                label={installationResults.get(update.kb_id || update.title)?.success ? 
+                                                                    "Installé" : "Erreur"}
+                                                                color={installationResults.get(update.kb_id || update.title)?.success ? 
+                                                                    "success" : "error"}
+                                                                size="small"
+                                                                sx={{ fontSize: '0.7rem' }}
+                                                            />
+                                                        </Box>
+                                                    )}
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -676,6 +830,25 @@ const UpdatesPage: React.FC = () => {
                         >
                             Vérifier à nouveau
                         </Button>
+                    </Box>
+                )}
+
+                {searchError && searchError.includes("PSWindowsUpdate") && (
+                    <Box sx={{ mt: 2, mb: 2 }}>
+                        <Alert 
+                            severity="warning" 
+                            action={
+                                <Button 
+                                    color="inherit" 
+                                    size="small"
+                                    onClick={installPSWindowsUpdateModule}
+                                >
+                                    Installer le module
+                                </Button>
+                            }
+                        >
+                            Le module PSWindowsUpdate est requis pour rechercher les mises à jour.
+                        </Alert>
                     </Box>
                 )}
             </HomeCard>
@@ -925,6 +1098,9 @@ const UpdatesPage: React.FC = () => {
                     </Box>
                 </Box>
             </Box>
+
+            {/* Ajouter le dialogue de résultat */}
+            <ResultDialog />
         </PageLayout>
     );
 };

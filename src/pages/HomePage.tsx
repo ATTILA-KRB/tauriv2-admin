@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 // Importer les composants MUI nécessaires
@@ -23,10 +23,7 @@ import GppGoodIcon from '@mui/icons-material/GppGood';
 import SdStorageIcon from '@mui/icons-material/SdStorage';
 import BarChartIcon from '@mui/icons-material/BarChart';
 
-// Ce composant reprend la logique de App.tsx pour le statut admin et les actions système
-
-// --- Interfaces --- 
-// Interface pour les infos Hardware
+// Interfaces
 interface HardwareInfo {
     cpu_name: string | null;
     cpu_cores: number | null;
@@ -36,24 +33,20 @@ interface HardwareInfo {
     ram_modules_count: number | null;
     motherboard_manufacturer: string | null;
     motherboard_product: string | null;
-    gpus: GpuInfo[]; // Nouvelle interface simplifiée
+    gpus: GpuInfo[];
 }
 
-// Interface pour le GPU simplifiée (correspondant à la structure Rust)
 interface GpuInfo {
-    name: string;           // Nom du GPU (sans null/Option)
-    ram_mb: number;         // RAM en MB (sans null/Option)
-    driver_version: string; // Version du pilote (sans null/Option)
+    name: string;
+    ram_mb: number;
+    driver_version: string;
 }
 
-// Interface Antivirus (copiée de SecurityPage)
 interface AntivirusStatusInfo {
     antispyware_enabled: boolean;
     real_time_protection_enabled: boolean;
-    // ... (autres champs non affichés ici pour l'instant)
 }
 
-// Interface Usage Système
 interface SystemUsageInfo {
     cpu_usage_percent: number;
     ram_used_mb: number;
@@ -63,6 +56,7 @@ interface SystemUsageInfo {
 import HomeCard from '../components/HomeCard';
 
 const HomePage: React.FC = () => {
+    // États
     const [isElevated, setIsElevated] = useState<boolean | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [elevationError, setElevationError] = useState<string | null>(null);
@@ -70,8 +64,6 @@ const HomePage: React.FC = () => {
     const [hardwareInfo, setHardwareInfo] = useState<HardwareInfo | null>(null);
     const [isLoadingHardware, setIsLoadingHardware] = useState<boolean>(true);
     const [hardwareError, setHardwareError] = useState<string | null>(null);
-
-    // Nouveaux états
     const [avStatus, setAvStatus] = useState<AntivirusStatusInfo | null>(null);
     const [isLoadingAv, setIsLoadingAv] = useState<boolean>(true);
     const [avError, setAvError] = useState<string | null>(null);
@@ -79,156 +71,94 @@ const HomePage: React.FC = () => {
     const [isLoadingUsage, setIsLoadingUsage] = useState<boolean>(true);
     const [usageError, setUsageError] = useState<string | null>(null);
 
-    // États pour la recherche ordinateur AD
-    // ... (previous states) ...
+    // ------------------------------------------------------------------
+    // 1) Vérification élévation + Hardware + AV en parallèle au montage
+    // ------------------------------------------------------------------
+    useEffect(() => {
+        let mounted = true;
 
-    // Statut Admin (Décommenter)
-    useEffect(() => {
-        invoke<boolean>('is_elevated')
-            .then(setIsElevated)
-            .catch((err) => {
-                console.error("Erreur is_elevated:", err);
-                setErrorMsg(typeof err === 'string' ? err : 'Erreur inconnue');
-            });
-    }, []);
-    
-    // Charger les infos Hardware - simplification de la logique
-    useEffect(() => {
-        setIsLoadingHardware(true);
-        setHardwareError(null);
-        
-        invoke<HardwareInfo>('get_hardware_info')
-            .then(data => {
-                console.log("Received Hardware Info:", JSON.stringify(data));
-                if (data.gpus && data.gpus.length > 0) {
-                    console.log("GPUs bruts:", data.gpus);
-                    data.gpus.forEach((gpu, index) => {
-                        console.log(`GPU ${index+1} name:`, gpu.name);
-                        console.log(`GPU ${index+1} ram_mb:`, gpu.ram_mb);
-                        console.log(`GPU ${index+1} driver_version:`, gpu.driver_version);
-                    });
-                }
-                setHardwareInfo(data);
-            })
-            .catch(err => {
-                console.error("Erreur récupération hardware:", err);
-                setHardwareError(typeof err === 'string' ? err : 'Erreur inconnue (hardware).');
-            })
-            .finally(() => {
-                setIsLoadingHardware(false);
-            });
-    }, []); // Ne dépend de rien pour éviter les appels multiples
-
-    // Charger l'état antivirus pour résumé
-    useEffect(() => {
-        setIsLoadingAv(true);
-        setAvError(null);
-        invoke<AntivirusStatusInfo>('get_antivirus_status')
-            .then(data => {
-                console.log("Statut AV reçu:", data);
-                setAvStatus(data);
-                setAvError(null);
-            })
-            .catch(err => {
-                console.error("Erreur statut AV:", err);
-                setAvError(typeof err === 'string' ? err : 'Erreur inconnue (AV).');
-            })
-            .finally(() => setIsLoadingAv(false));
-    }, []);
-
-    // Charger utilisation système périodiquement
-    useEffect(() => {
-        let isMounted = true;
-        
-        const fetchUsage = async () => {
-            if (!isMounted) return;
-            
+        (async () => {
             try {
-                // N'affichons le chargement que lors du premier appel
-                if (!systemUsage) {
-                    setIsLoadingUsage(true);
-                }
-                
-                const data = await invoke<SystemUsageInfo>('get_system_usage');
-                
-                if (!isMounted) return;
-                
-                // Vérifier que les valeurs sont cohérentes
-                if (typeof data.cpu_usage_percent === 'number' && 
-                    typeof data.ram_used_mb === 'number' && 
-                    typeof data.ram_total_mb === 'number') {
-                    // Mise à jour silencieuse sans indicateur de chargement
-                    setSystemUsage(data);
-                    setUsageError(null);
-                } else {
-                    throw new Error("Format de données invalide pour l'utilisation système");
-                }
+                const [elevated, hw, av] = await Promise.all([
+                    invoke<boolean>('is_elevated'),
+                    invoke<HardwareInfo>('get_hardware_info'),
+                    invoke<AntivirusStatusInfo>('get_antivirus_status')
+                ]);
+
+                if (!mounted) return;
+                setIsElevated(elevated);
+                setHardwareInfo(hw);
+                setAvStatus(av);
+                setErrorMsg(null);
+                setHardwareError(null);
+                setAvError(null);
             } catch (err) {
-                if (!isMounted) return;
-                
-                console.error("Erreur usage système:", err);
-                
-                // En cas d'erreur, ne pas changer l'état actuel pour éviter des flashs d'UI
-                if (!systemUsage) {
-                    // Seulement si nous n'avons pas de données, créer des valeurs factices
-                    const fakeData: SystemUsageInfo = {
-                        cpu_usage_percent: 50,
-                        ram_used_mb: 16000,
-                        ram_total_mb: 32000
-                    };
-                    
-                    setSystemUsage(fakeData);
-                }
-                
-                setUsageError(typeof err === 'string' ? err : 'Erreur inconnue (usage).');
+                if (!mounted) return;
+                console.error('Erreur init :', err);
+                setErrorMsg('Erreur initialisation');
             } finally {
-                if (isMounted) {
-                    setIsLoadingUsage(false);
+                if (mounted) {
+                    setIsLoadingHardware(false);
+                    setIsLoadingAv(false);
                 }
             }
-        };
-        
-        // Appel initial
-        fetchUsage();
-        
-        // Actualisation avec un intervalle plus court (1.5 seconde au lieu de 8)
-        const intervalId = setInterval(fetchUsage, 1500);
-        
-        return () => {
-            isMounted = false;
-            clearInterval(intervalId);
-        };
+        })();
+
+        return () => { mounted = false; };
     }, []);
 
-    // Demande d'élévation
-    const handleRequireAdmin = () => {
-        setElevationError(null);
-        invoke<void>('require_admin')
-            .then(() => {
-                 console.log("Demande d'élévation envoyée.");
-            })
-            .catch((err) => {
-                console.error("Erreur élévation:", err);
-                const errorString = typeof err === 'string' ? err : (err instanceof Error ? err.message : 'Erreur inconnue');
-                setElevationError(`Échec: ${errorString}`);
-            });
+    // ------------------------------------------------------------------
+    // 2) Usage CPU/RAM : callback + interval
+    // ------------------------------------------------------------------
+    const fetchUsage = useCallback(async () => {
+        try {
+            const data = await invoke<SystemUsageInfo>('get_system_usage');
+            setSystemUsage(data);
+            setUsageError(null);
+        } catch (err) {
+            console.error('Erreur usage système :', err);
+            setUsageError('Lecture usage système impossible');
+        } finally {
+            setIsLoadingUsage(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchUsage();                     // premier appel
+        const id = setInterval(fetchUsage, 1500);
+        return () => clearInterval(id);
+    }, [fetchUsage]);
+
+    // Handlers
+    const handleRequireAdmin = async () => {
+        try {
+            setElevationError(null);
+            await invoke<void>('require_admin');
+            console.log("Demande d'élévation envoyée.");
+        } catch (err) {
+            console.error("Erreur élévation:", err);
+            const errorString = typeof err === 'string' ? err : (err instanceof Error ? err.message : 'Erreur inconnue');
+            setElevationError(`Échec: ${errorString}`);
+        }
     };
 
-     // Actions Système
-    const handleSystemAction = (action: 'restart' | 'shutdown') => {
+    const handleSystemAction = async (action: 'restart' | 'shutdown') => {
         const command = action === 'restart' ? 'restart_computer' : 'shutdown_computer';
         const actionName = action === 'restart' ? 'redémarrer' : 'arrêter';
-        setSystemActionError(null);
-        if (!window.confirm(`Êtes-vous sûr de vouloir ${actionName} l'ordinateur ?`)) return;
-        invoke<void>(command)
-            .then(() => console.log(`Commande ${actionName} envoyée.`))
-            .catch(err => {
-                console.error(`Erreur ${actionName}:`, err);
-                setSystemActionError(`Erreur ${actionName}: ${typeof err === 'string' ? err : 'Erreur inconnue. Vérifiez les privilèges admin.'}`);
-            });
+        
+        try {
+            setSystemActionError(null);
+            if (!window.confirm(`Êtes-vous sûr de vouloir ${actionName} l'ordinateur ?`)) return;
+            
+            await invoke<void>(command);
+            console.log(`Commande ${actionName} envoyée.`);
+        } catch (err) {
+            console.error(`Erreur ${actionName}:`, err);
+            setSystemActionError(`Erreur ${actionName}: ${typeof err === 'string' ? err : 'Erreur inconnue. Vérifiez les privilèges admin.'}`);
+        }
     };
 
-    // Calculer le % de RAM utilisée
+    // Calculs
     const ramUsagePercent = systemUsage && systemUsage.ram_total_mb > 0
         ? (systemUsage.ram_used_mb / systemUsage.ram_total_mb) * 100
         : 0;
@@ -238,12 +168,11 @@ const HomePage: React.FC = () => {
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                 <ComputerIcon sx={{ fontSize: 32, mr: 1, color: 'primary.main' }} />
                 <Typography variant="h4" component="h1" gutterBottom sx={{ m: 0 }}>
-                    Accueil - Windows Admin Tool
+                    Accueil - KRB Tool
                 </Typography>
             </Box>
             
             <Typography variant="body1" sx={{ mb: 2, color: 'text.secondary' }}>
-                Bienvenue sur l'outil d'administration Windows.
             </Typography>
             
             {/* Cartes statut - Première ligne */}
@@ -815,13 +744,16 @@ const HomePage: React.FC = () => {
                                             pl: 0,
                                             m: 0
                                         }}>
-                                            {hardwareInfo.gpus.map((gpu, index) => {
-                                                const ramGB = (gpu.ram_mb / 1024).toFixed(1);
-                                                
+                                            {hardwareInfo.gpus.map((gpu, idx) => {
+                                                const ram =
+                                                    gpu.ram_mb > 0
+                                                        ? `${(gpu.ram_mb / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} GB`
+                                                        : 'Partagée / N.C.';
+
                                                 return (
                                                     <Box 
                                                         component="li" 
-                                                        key={index}
+                                                        key={idx}
                                                         sx={{
                                                             p: 1,
                                                             mb: 1,
@@ -832,15 +764,9 @@ const HomePage: React.FC = () => {
                                                     >
                                                         <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
                                                             {gpu.name}
+                                                            <br />
+                                                            {ram} – Driver : {gpu.driver_version}
                                                         </Typography>
-                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                                                            <Typography variant="caption">
-                                                                {ramGB} GB
-                                                            </Typography>
-                                                            <Typography variant="caption">
-                                                                Driver: {gpu.driver_version}
-                                                            </Typography>
-                                                        </Box>
                                                     </Box>
                                                 );
                                             })}

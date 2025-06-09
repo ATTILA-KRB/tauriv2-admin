@@ -116,7 +116,10 @@ pub fn run() {
       // Commandes pour le serveur (fictif)
       is_server_ready,
       get_server_port,
-      get_server_error
+      get_server_error,
+      modules::updates::install_pswindowsupdate_module,
+      modules::updates::install_windows_updates,
+      modules::updates::install_defender_updates,
     ])
     .build(tauri::generate_context!("tauri.conf.json"))
     .expect("Failed to build Tauri application")

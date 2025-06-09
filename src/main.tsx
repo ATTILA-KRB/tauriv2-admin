@@ -61,7 +61,7 @@ function Layout() {
         >
           <Toolbar>
             <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-              Windows Admin Tool
+              KRB Tool - V0.1.3
             </Typography>
             <IconButton sx={{ ml: 1 }} onClick={toggleColorMode} color="inherit">
               {theme.palette.mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}

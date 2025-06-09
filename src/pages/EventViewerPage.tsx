@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import PageLayout from '../components/PageLayout';
 import HomeCard from '../components/HomeCard';
@@ -33,6 +33,7 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Tooltip from '@mui/material/Tooltip';
 import Divider from '@mui/material/Divider';
+import TablePagination from '@mui/material/TablePagination';
 
 // Icons
 import EventIcon from '@mui/icons-material/Event';
@@ -67,7 +68,7 @@ const LEVELS = [
     { value: 2, label: "Erreur" },
     { value: 1, label: "Critique" }
 ];
-const MAX_EVENTS_OPTIONS = [25, 50, 100, 250, 500, 1000];
+const MAX_EVENTS_OPTIONS = [10, 25, 50, 100, 250, 500, 1000];
 
 const EventViewerPage: React.FC = () => {
     // Filtres
@@ -77,6 +78,9 @@ const EventViewerPage: React.FC = () => {
     const [providerFilter, setProviderFilter] = useState<string>("");
     const [idFilter, setIdFilter] = useState<string>(""); // Garder comme string pour l'input
     const [openDeleteDialog, setOpenDeleteDialog] = useState<boolean>(false);
+    const [messageFilter, setMessageFilter] = useState<string>("");
+    const [page, setPage] = useState<number>(0);
+    const [rowsPerPage, setRowsPerPage] = useState<number>(10);
 
     // États affichage
     const [events, setEvents] = useState<EventLogEntry[]>([]);
@@ -105,6 +109,33 @@ const EventViewerPage: React.FC = () => {
             .catch(err => setError(typeof err === 'string' ? err : `Erreur inconnue (${logName}).`))
             .finally(() => setIsLoading(false));
     }, [logName, maxEvents, levelFilter, providerFilter, idFilter]);
+
+    // Filtrage local sur le contenu du message
+    const filteredEvents = useMemo(() => {
+        if (messageFilter.trim() === "") return events;
+        const lower = messageFilter.toLowerCase();
+        return events.filter(ev => ev.message.toLowerCase().includes(lower));
+    }, [events, messageFilter]);
+
+    // Pagination
+    const displayedEvents = useMemo(() => {
+        const start = page * rowsPerPage;
+        return filteredEvents.slice(start, start + rowsPerPage);
+    }, [filteredEvents, page, rowsPerPage]);
+
+    const handleChangePage = (_event: unknown, newPage: number) => {
+        setPage(newPage);
+    };
+
+    const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+        setRowsPerPage(parseInt(event.target.value, 10));
+        setPage(0);
+    };
+
+    // Réinitialiser la pagination lorsqu'on rafraîchit ou filtre différemment
+    useEffect(() => {
+        setPage(0);
+    }, [messageFilter, events]);
 
     useEffect(() => {
         fetchEvents(); // Charger au démarrage et quand les filtres changent
@@ -178,7 +209,7 @@ const EventViewerPage: React.FC = () => {
                 minute: '2-digit',
                 second: '2-digit'
             });
-        } catch (e) {
+        } catch {
             return dateStr;
         }
     };
@@ -342,6 +373,30 @@ const EventViewerPage: React.FC = () => {
                                     </FormControl>
                                 </GridItem>
 
+                                <GridItem xs={12} sm={6} md={3}>
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        label="Recherche message"
+                                        value={messageFilter}
+                                        onChange={(e) => setMessageFilter(e.target.value)}
+                                        placeholder="Texte à rechercher…"
+                                        disabled={isLoading}
+                                        InputProps={{
+                                            startAdornment: (
+                                                <InputAdornment position="start">
+                                                    <SearchIcon color="primary" />
+                                                </InputAdornment>
+                                            )
+                                        }}
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                borderRadius: '12px'
+                                            }
+                                        }}
+                                    />
+                                </GridItem>
+
                                 <GridItem xs={12} sm={6} md={9}>
                                     <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                                         <Button
@@ -400,7 +455,7 @@ const EventViewerPage: React.FC = () => {
                                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
                                     <CircularProgress size={40} />
                                 </Box>
-                            ) : events.length === 0 ? (
+                            ) : filteredEvents.length === 0 ? (
                                 <Box sx={{ 
                                     display: 'flex', 
                                     flexDirection: 'column', 
@@ -439,7 +494,7 @@ const EventViewerPage: React.FC = () => {
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
-                                            {events.map((event, index) => (
+                                            {displayedEvents.map((event, index) => (
                                                 <TableRow 
                                                     key={index} 
                                                     hover
@@ -492,6 +547,17 @@ const EventViewerPage: React.FC = () => {
                                         </TableBody>
                                     </Table>
                                 </TableContainer>
+                            )}
+                            {filteredEvents.length > 0 && (
+                                <TablePagination
+                                    component="div"
+                                    count={filteredEvents.length}
+                                    page={page}
+                                    onPageChange={handleChangePage}
+                                    rowsPerPage={rowsPerPage}
+                                    onRowsPerPageChange={handleChangeRowsPerPage}
+                                    rowsPerPageOptions={[10, 25, 50, 100]}
+                                />
                             )}
                         </Box>
                     </HomeCard>

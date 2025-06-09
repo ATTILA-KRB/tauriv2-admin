@@ -45,6 +45,9 @@ interface ShareInfo {
     name: string;
     path: string;
     description: string;
+    state: string;
+    share_type: string;
+    current_users: number;
 }
 
 const SharesPage: React.FC = () => {
@@ -134,15 +137,15 @@ const SharesPage: React.FC = () => {
 
     return (
         <PageLayout 
-            title="Partages Réseau Locaux" 
+            title="Lecteurs Réseau Mappés" 
             icon={<FolderSharedIcon />}
-            description="Créez et gérez les partages réseau de votre ordinateur"
+            description="Visualisez et gérez vos lecteurs réseau mappés visibles dans l'Explorateur"
         >
             <Grid container spacing={3}>
                 {/* Section Création de partage */}
                 <Grid item xs={12}>
                     <HomeCard 
-                        title="Créer un nouveau partage" 
+                        title="Mapper un nouveau lecteur réseau" 
                         icon={<ShareIcon />}
                         variant="gradient"
                         accentColor="#1976d2"
@@ -150,7 +153,7 @@ const SharesPage: React.FC = () => {
                     >
                         <Box component="form" onSubmit={handleCreateShare} sx={{ p: 3 }}>
                             <Typography variant="body2" color="text.secondary" paragraph>
-                                Créez un nouveau partage réseau en spécifiant un nom, un chemin et une description optionnelle.
+                                Mappez un nouveau lecteur réseau en spécifiant une lettre de lecteur et un chemin UNC (\\serveur\partage).
                             </Typography>
                             
                             <Grid container spacing={2}>
@@ -158,11 +161,11 @@ const SharesPage: React.FC = () => {
                                     <TextField
                                         fullWidth
                                         required
-                                        label="Nom du partage"
+                                        label="Nom du lecteur"
                                         value={newName}
                                         onChange={(e) => setNewName(e.target.value)}
                                         disabled={isCreating}
-                                        placeholder="Ex: Documents"
+                                        placeholder="Ex: D:"
                                         size="small"
                                         InputProps={{
                                             startAdornment: (
@@ -183,11 +186,11 @@ const SharesPage: React.FC = () => {
                                     <TextField
                                         fullWidth
                                         required
-                                        label="Chemin du dossier"
+                                        label="Chemin UNC"
                                         value={newPath}
                                         onChange={(e) => setNewPath(e.target.value)}
                                         disabled={isCreating}
-                                        placeholder="Ex: C:\Documents"
+                                        placeholder="Ex: \\serveur\partage"
                                         size="small"
                                         InputProps={{
                                             startAdornment: (
@@ -211,7 +214,7 @@ const SharesPage: React.FC = () => {
                                         value={newDesc}
                                         onChange={(e) => setNewDesc(e.target.value)}
                                         disabled={isCreating}
-                                        placeholder="Ex: Documents partagés pour l'équipe"
+                                        placeholder="Ex: Partage de données"
                                         size="small"
                                         InputProps={{
                                             startAdornment: (
@@ -244,7 +247,7 @@ const SharesPage: React.FC = () => {
                                                 '&:hover': { transform: 'translateY(-2px)' }
                                             }}
                                         >
-                                            {isCreating ? "Création..." : "Créer le partage"}
+                                            {isCreating ? "Création..." : "Créer le lecteur"}
                                         </Button>
                                         
                                         {actionMessage?.type === 'success' && (
@@ -268,7 +271,7 @@ const SharesPage: React.FC = () => {
                 {/* Section Liste des partages */}
                 <Grid item xs={12}>
                     <HomeCard 
-                        title="Partages existants" 
+                        title="Lecteurs existants" 
                         icon={<DriveNetworkIcon />}
                         variant="standard"
                         isLoading={isLoading && shares.length === 0}
@@ -311,10 +314,10 @@ const SharesPage: React.FC = () => {
                                 }}>
                                     <FolderSpecialIcon sx={{ fontSize: 60, color: 'action.disabled' }} />
                                     <Typography variant="body1" color="text.secondary">
-                                        Aucun partage réseau configuré actuellement.
+                                        Aucun lecteur réseau configuré actuellement.
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
-                                        Utilisez le formulaire ci-dessus pour créer votre premier partage.
+                                        Utilisez le formulaire ci-dessus pour créer votre premier lecteur.
                                     </Typography>
                                 </Box>
                             ) : (
@@ -330,9 +333,11 @@ const SharesPage: React.FC = () => {
                                                 bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)', 
                                                 '& th': { fontWeight: 'bold' } 
                                             }}>
-                                                <TableCell>Nom du partage</TableCell>
+                                                <TableCell>Nom du lecteur</TableCell>
                                                 <TableCell>Chemin</TableCell>
                                                 <TableCell>Description</TableCell>
+                                                <TableCell>État</TableCell>
+                                                <TableCell>Utilisateurs</TableCell>
                                                 <TableCell align="center">Actions</TableCell>
                                             </TableRow>
                                         </TableHead>
@@ -364,14 +369,37 @@ const SharesPage: React.FC = () => {
                                                         />
                                                     </TableCell>
                                                     <TableCell>
-                                                        {share.description || (
+                                                        {share.description && share.description !== "Aucune description" ? (
+                                                            <Typography variant="body2">
+                                                                {share.description}
+                                                            </Typography>
+                                                        ) : (
                                                             <Typography variant="caption" color="text.secondary" fontStyle="italic">
                                                                 Aucune description
                                                             </Typography>
                                                         )}
                                                     </TableCell>
+                                                    <TableCell>
+                                                        <Chip 
+                                                            label={share.state}
+                                                            size="small"
+                                                            color={share.state === "Online" ? "success" : "default"}
+                                                            variant={share.state === "Online" ? "filled" : "outlined"}
+                                                            sx={{ borderRadius: '8px' }}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                            <Typography variant="body2" fontWeight="medium">
+                                                                {share.current_users}
+                                                            </Typography>
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                {share.current_users <= 1 ? "utilisateur" : "utilisateurs"}
+                                                            </Typography>
+                                                        </Box>
+                                                    </TableCell>
                                                     <TableCell align="center">
-                                                        <Tooltip title="Supprimer le partage">
+                                                        <Tooltip title="Supprimer le lecteur">
                                                             <IconButton
                                                                 size="small"
                                                                 color="error"
@@ -403,12 +431,12 @@ const SharesPage: React.FC = () => {
                         <Divider sx={{ mb: 2 }} />
                         <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
                             <Typography variant="subtitle2" gutterBottom>
-                                À propos des partages réseau
+                                À propos des lecteurs réseau
                             </Typography>
                             <Typography variant="body2">
-                                Les partages réseau vous permettent de rendre des dossiers accessibles à d'autres utilisateurs sur votre réseau.
+                                Les lecteurs réseau vous permettent de rendre des dossiers accessibles à d'autres utilisateurs sur votre réseau.
                                 Assurez-vous que le chemin spécifié existe et que vous avez les permissions nécessaires pour le partager.
-                                Les partages créés ici seront visibles par les autres ordinateurs du réseau via l'adresse <b>\\{window.location.hostname}\nom_du_partage</b>.
+                                Les lecteurs créés ici seront visibles par les autres ordinateurs du réseau via l'adresse <b>\\{window.location.hostname}\nom_du_lecteur</b>.
                             </Typography>
                         </Alert>
                     </Box>
@@ -433,9 +461,9 @@ const SharesPage: React.FC = () => {
                 </DialogTitle>
                 <DialogContent>
                     <DialogContentText id="alert-dialog-description">
-                        Êtes-vous sûr de vouloir supprimer le partage réseau <b>{shareToDelete}</b> ?
+                        Êtes-vous sûr de vouloir supprimer le lecteur réseau <b>{shareToDelete}</b> ?
                         <br /><br />
-                        Cette action supprimera uniquement le partage réseau, mais ne supprimera pas les fichiers physiques.
+                        Cette action supprimera uniquement le lecteur réseau, mais ne supprimera pas les fichiers physiques.
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions sx={{ p: 2 }}>

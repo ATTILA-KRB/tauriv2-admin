@@ -29,15 +29,13 @@ struct PsBaseBoard {
     product: Option<String>,
 }
 
-// Ajouter struct pour WMI VideoController
-#[derive(Deserialize, Serialize, Debug, Clone)]
+// ─── STRUCT WMI GPU (corrigée) ─────────────────
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
 struct PsVideoController {
-    #[serde(rename = "Name")]
     name: Option<String>,
-    #[serde(rename = "AdapterRAM")]
-    adapter_ram: Option<f64>, // En MB, maintenant un nombre à virgule flottante
-    #[serde(rename = "DriverVersion")]
-    driver_version: Option<String>, // Version du pilote
+    adapter_ram: Option<u64>,         // octets
+    driver_version: Option<String>,
 }
 
 // Structure simplifiée pour le GPU à envoyer au frontend
@@ -61,6 +59,29 @@ pub struct HardwareInfo {
     motherboard_product: Option<String>,
     gpus: Vec<GpuInfo>,    // Changé pour utiliser GpuInfo au lieu de PsVideoController
 }
+
+// ────────────────────────────────────────────────
+//  Clés possibles dans le rapport DxDiag (EN + FR)
+// ────────────────────────────────────────────────
+const NAME_KEYS: &[&str] = &[
+    "Card name",
+    "Nom de la carte",
+    "Nom du périphérique",
+];
+
+const MEM_KEYS: &[&str] = &[
+    "Dedicated Memory",
+    "Mémoire dédiée",
+    "Mémoire vidéo dédiée",
+    "Approx. Total Memory",
+    "Mémoire totale approximative",
+];
+
+const DRV_KEYS: &[&str] = &[
+    "Driver Version",
+    "Version du pilote",
+];
+// ────────────────────────────────────────────────
 
 // --- Helpers ---
 
@@ -109,7 +130,7 @@ pub async fn get_hardware_info(app: AppHandle) -> Result<HardwareInfo, String> {
         get_wmi_json::<PsProcessor>(&app, "Win32_Processor", "Name, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed"),
         get_wmi_json::<PsBaseBoard>(&app, "Win32_BaseBoard", "Manufacturer, Product"),
         get_wmi_json::<PsPhysicalMemory>(&app, "Win32_PhysicalMemory", "Capacity"),
-        get_gpu_info(&app) // Nouvelle fonction pour GPU avec une commande PowerShell plus complète
+        get_gpu_dxdiag(&app) // Nouvelle fonction pour GPU avec une commande PowerShell plus complète
     );
    
     // --- Logging --- 
@@ -145,85 +166,152 @@ pub async fn get_hardware_info(app: AppHandle) -> Result<HardwareInfo, String> {
         info.ram_modules_count = Some(ram_modules.len());
     }
     
-    // Mapper GPU depuis la nouvelle fonction et convertir en GpuInfo
-    if let Ok(gpu_infos_wmi) = gpu_res {
-        // Convertir de PsVideoController vers GpuInfo
-        info.gpus = gpu_infos_wmi.into_iter()
-            .map(|gpu| {
-                // Utiliser une chaîne vide par défaut pour éviter les null
-                let name = gpu.name.unwrap_or_else(|| "GPU Inconnu".to_string());
-                
-                // Déterminer RAM basée sur le nom si non disponible
-                let ram = match gpu.adapter_ram {
-                    Some(ram) => ram,
-                    None => {
-                        if name.contains("NVIDIA") && name.contains("3070") {
-                            8192.0 // 8 GB pour RTX 3070
-                        } else if name.contains("Intel") && name.contains("UHD") {
-                            1024.0 // 1 GB pour Intel UHD
-                        } else {
-                            0.0 // Valeur par défaut
-                        }
-                    }
-                };
-                
-                GpuInfo {
-                    name,
-                    ram_mb: ram,
-                    driver_version: gpu.driver_version.unwrap_or_else(|| "Inconnu".to_string()),
-                }
-            })
-            .collect();
+    // 1) dxdiag
+    let mut gpus = gpu_res.unwrap_or_else(|_| vec![]);
+    // 2) si vide -> fallback WMI
+    if gpus.is_empty() {
+        gpus = get_gpu_wmi(&app).await;
     }
+    info.gpus = gpus;
 
     Ok(info)
 }
 
-// Nouvelle fonction pour obtenir des informations GPU plus détaillées
-async fn get_gpu_info(app: &AppHandle) -> Result<Vec<PsVideoController>, String> {
-    // Script simple avec valeurs fixes pour diagnostic
-    let command = r#"
-        @(
-            @{
-                Name = "Intel(R) UHD Graphics 770"; 
-                AdapterRAM = 1024.0;  # 1 GB fixe
-                DriverVersion = "27.20.100.9749"
-            },
-            @{
-                Name = "NVIDIA GeForce RTX 3070"; 
-                AdapterRAM = 8192.0;  # 8 GB fixe 
-                DriverVersion = "511.65"
-            }
-        ) | ConvertTo-Json -Compress
+// ─── Récupération via dxdiag (corrigée) ─────────
+async fn get_gpu_dxdiag(app: &AppHandle) -> Result<Vec<GpuInfo>, String> {
+    // script PS : -Raw => une seule chaîne, puis split pour obtenir un tableau
+    let ps = r#"
+      $tmp = Join-Path $env:TEMP ("dx_{0}.txt" -f ([guid]::NewGuid().ToString("N")))
+      dxdiag /whql:off /t "$tmp" | Out-Null
+      while (-not (Test-Path $tmp)) { Start-Sleep -Milliseconds 200 }
+      ($content = Get-Content -Path "$tmp" -Raw) | Out-Null
+      $content -split "`r`n" | ConvertTo-Json -Compress
     "#;
-    
-    let output = app.shell().command("powershell").args(&["-Command", command]).output().await
-        .map_err(|e| format!("Erreur lancement PowerShell pour GPU: {}", e))?;
-    
-    // Print output for debugging
-    println!("PowerShell GPU Output: {}", String::from_utf8_lossy(&output.stdout));
-    
-    if !output.status.success() {
-        println!("Avertissement: Commande PowerShell pour GPU a échoué: {:?}", output.status);
+
+    let out = app
+        .shell()
+        .command("powershell")
+        .args(&["-ExecutionPolicy", "Bypass", "-Command", ps])
+        .output()
+        .await
+        .map_err(|e| format!("dxdiag launch: {e}"))?;
+
+    if !out.status.success() {
+        return Err(format!(
+            "dxdiag failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+
+    let json = String::from_utf8_lossy(&out.stdout);
+    if json.trim().is_empty() {
         return Ok(vec![]);
     }
-    
-    let json_str = String::from_utf8_lossy(&output.stdout);
-    if json_str.trim().is_empty() || json_str.trim().to_lowercase() == "null" {
-        return Ok(vec![]);
-    }
-    
-    // Parse JSON et log le résultat
-    let result: Result<Vec<PsVideoController>, _> = serde_json::from_str(&json_str);
-    match &result {
-        Ok(gpus) => {
-            for (i, gpu) in gpus.iter().enumerate() {
-                println!("GPU {} parsed: Name={:?}, RAM={:?}, Driver={:?}", 
-                    i+1, gpu.name, gpu.adapter_ram, gpu.driver_version);
+
+    // Essayons d'abord en tant que tableau de chaînes
+    let lines: Vec<String> = match serde_json::from_str(&json) {
+        Ok(v) => v,
+        Err(_) => {
+            // parfois ConvertTo-Json renvoie un objet -> on l'ignore proprement
+            println!("dxdiag JSON : format inattendu, aucun GPU extrait");
+            return Ok(vec![]);
+        }
+    };
+
+    let mut gpus = Vec::new();
+    let mut current: HashMap<String, String> = HashMap::new();
+
+    for l in lines {
+        // nouvelle section "---------------"
+        if l.starts_with("---------------") {
+            if !current.is_empty() {
+                push_gpu(&mut gpus, &current);
+                current.clear();
             }
-        },
-        Err(e) => println!("Erreur parsing JSON: {}", e)
+            continue;
+        }
+
+        // découpe clé : valeur
+        if let Some((k, v)) = l.split_once(':') {
+            let key   = k.trim().to_string();
+            let value = v.trim().to_string();
+
+            // si une nouvelle ligne « Nom de carte » arrive alors qu'un GPU est en cours
+            if NAME_KEYS.contains(&key.as_str()) && !current.is_empty() {
+                push_gpu(&mut gpus, &current);
+                current.clear();
+            }
+
+            current.insert(key, value);
+        }
     }
-    
-    result.map_err(|e| format!("Erreur parsing JSON GPU: {}\nJSON: {}", e, json_str))
-} 
+
+    // dernière carte
+    if !current.is_empty() {
+        push_gpu(&mut gpus, &current);
+    }
+
+    Ok(gpus)
+}
+
+fn first_val<'a>(map: &'a HashMap<String, String>, keys: &[&str]) -> Option<&'a String> {
+    keys.iter().find_map(|k| map.get(*k))
+}
+
+fn push_gpu(list: &mut Vec<GpuInfo>, map: &HashMap<String, String>) {
+    // nom
+    if let Some(name) = first_val(map, NAME_KEYS) {
+        // vram
+        let ram_mb = first_val(map, MEM_KEYS)
+            .and_then(|s| s.split_whitespace().next())
+            .and_then(|n| n.replace([' ', ',', '.'], "").parse::<u64>().ok())
+            .map(|mb| mb as f64)
+            .unwrap_or(0.0);
+
+        // pilote
+        let drv = first_val(map, DRV_KEYS).cloned().unwrap_or_default();
+
+        list.push(GpuInfo {
+            name: name.clone(),
+            ram_mb,
+            driver_version: drv,
+        });
+    }
+}
+
+// ─────────────── NOUVEAU : fallback WMI pur ───────────────
+async fn get_gpu_wmi(app: &AppHandle) -> Vec<GpuInfo> {
+    let ps = r#"
+      Get-CimInstance Win32_VideoController |
+      Select-Object Name,AdapterRAM,DriverVersion |
+      ConvertTo-Json -Compress
+    "#;
+
+    // On tente l'appel PowerShell ; en cas d'erreur on renvoie simplement un Vec vide
+    let out = match app.shell()
+        .command("powershell")
+        .args(&["-ExecutionPolicy", "Bypass", "-Command", ps])
+        .output()
+        .await
+    {
+        Ok(o) => o,
+        Err(e) => {
+            println!("Erreur GPU WMI : {e}");
+            return vec![];
+        }
+    };
+
+    let json = String::from_utf8_lossy(&out.stdout);
+    if json.trim().is_empty() { return vec![] }
+
+    let list: Result<Vec<PsVideoController>,_> = serde_json::from_str(&json);
+    list.unwrap_or_default()
+        .into_iter()
+        .map(|g| GpuInfo{
+            name: g.name.unwrap_or_else(||"GPU inconnu".into()),
+            ram_mb: g.adapter_ram.map(|b| b as f64 / 1_048_576.0).unwrap_or(0.0),
+            driver_version: g.driver_version.unwrap_or_default()
+        })
+        .collect()
+}
+// ----------------------------------------------------------- 
