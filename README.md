@@ -1,4 +1,4 @@
-# ADMIN-TOOL 🛠️
+# KRB-TOOL 🛠️
 
 Interface d'administration Windows complète développée avec React, TypeScript et Tauri, offrant une solution moderne et sécurisée pour la gestion système Windows.
 
@@ -42,21 +42,6 @@ Interface d'administration Windows complète développée avec React, TypeScript
   - Mise à jour des stratégies de groupe
   - Réinitialisation des mots de passe
 
-## 🚀 Installation
-
-```bash
-# Cloner le repository
-git clone [URL_DU_REPO]
-
-# Installer les dépendances
-npm install
-
-# Lancer en mode développement
-npm run dev
-
-# Construire pour la production
-npm run build
-```
 
 ## 🔧 Prérequis
 
@@ -89,8 +74,5 @@ L'application inclut un système de mise à jour automatique pour :
 
 ## 📝 Version
 
-Version actuelle : 0.1.0
+Version actuelle : 0.1.4
 
-## 📄 Licence
-
-MIT License - Voir le fichier [LICENSE](LICENSE) pour plus de détails.
